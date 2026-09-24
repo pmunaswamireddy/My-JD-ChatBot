@@ -145,9 +145,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     filename = doc.file_name or "document"
     ext = Path(filename).suffix.lower()
 
-    if ext not in [".pdf", ".docx", ".doc", ".txt", ".md"]:
+    if ext not in [".pdf", ".docx", ".doc", ".txt", ".md", ".rtf", ".odt", ".csv", ".html"]:
         await update.message.reply_text(
-            f"⚠️ Unsupported format `{ext}`. Please upload `.pdf`, `.docx`, or `.txt` files.",
+            f"⚠️ Unsupported format `{ext}`. Supported formats: `.pdf`, `.docx`, `.doc`, `.txt`, `.rtf`, `.md`.",
             parse_mode="Markdown"
         )
         return
