@@ -1,0 +1,29 @@
+# Environment & Secrets
+.env
+*.env
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+env/
+venv/
+.venv/
+
+# Uploads & Temporary files
+uploads/
+*.pdf
+*.docx
+!sample_data/*.txt
+!sample_data/*.pdf
+!sample_data/*.docx
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

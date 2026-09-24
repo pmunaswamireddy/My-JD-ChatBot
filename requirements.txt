@@ -1,0 +1,7 @@
+google-genai>=2.25.0
+python-telegram-bot>=22.8
+pypdf>=6.19.0
+python-docx>=1.2.0
+requests>=2.34.0
+python-dotenv>=1.2.0
+flask>=3.1.0

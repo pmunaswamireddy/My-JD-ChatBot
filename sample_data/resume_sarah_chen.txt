@@ -1,0 +1,25 @@
+SARAH CHEN
+Email: sarah.chen@example.com | Phone: +1-555-014-9921
+Location: Austin, TX | Portfolio: sarahchen-dev.io
+
+PROFESSIONAL SUMMARY
+Motivated Junior Frontend Developer with 1.5 years of experience building modern UI components in HTML, CSS, JavaScript, and React. Passionate about learning backend technologies and AI tool integration.
+
+TECHNICAL SKILLS
+- Languages: JavaScript, HTML5, CSS3, basic Python
+- Frontend: React.js, TailwindCSS, Bootstrap, Vite
+- Tools: Git, GitHub, VS Code, Figma
+- Concepts: Responsive UI Design, REST API consumption
+
+EXPERIENCE
+Junior Frontend Developer | Pixl Interactive (2023 - Present)
+- Developed responsive landing pages and user interfaces using React and TailwindCSS.
+- Integrated REST API endpoints with frontend state management for an e-commerce catalog.
+- Participated in weekly code reviews and improved UI performance metrics by 20%.
+
+Web Development Intern | NextWave Tech (2022 - 2023)
+- Assisted in building mockups and prototypes using HTML, CSS, and vanilla JavaScript.
+- Fixed cross-browser compatibility bugs across desktop and mobile devices.
+
+EDUCATION
+B.S. in Information Technology | University of Texas at Austin (2019 - 2023)
