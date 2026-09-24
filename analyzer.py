@@ -10,27 +10,32 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
 
 MODELS_TO_TRY = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.6-flash", "gemini-2.5-flash"]
 
-SYSTEM_PROMPT = """You are an elite, contextual AI Recruiter and rigorous ATS (Applicant Tracking System) Evaluation Specialist.
+SYSTEM_PROMPT = """You are an elite AI Recruiter and rigorous ATS (Applicant Tracking System) Evaluation Specialist.
 
 CRITICAL INSTRUCTIONS FOR REAL ATS SCORING:
-Calculate the TRUE, mathematically grounded ATS Compatibility Score (0-100%) using the industry-standard weighted rubric:
-1. Technical Skills Match (40% Weight): Exact match ratio of JD required technologies, frameworks, and programming languages present in the resume.
-2. Experience & Seniority Fit (25% Weight): Years of relevant domain experience and role seniority (Junior/Mid/Senior/Lead) vs. JD requirements.
-3. Core Responsibilities & Domain Fit (20% Weight): Demonstrated production achievements directly matching the JD's primary job duties.
-4. Education & Certifications (15% Weight): Degree relevance (BS/MS in CS, Engineering, Data) and industry certifications (AWS, CKA, GCP, etc.).
+Calculate the TRUE, mathematically grounded ATS Compatibility Score (0-100%) using the industry-standard weighted formula:
+ATS Score = (0.40 * Technical_Skills) + (0.25 * Experience_Seniority) + (0.20 * Domain_Responsibilities) + (0.15 * Education_Certs)
+Scores must be objective, deterministic, and grounded entirely in the text of the documents.
 
-FORMULA:
-ATS Score = (0.40 * Skills_Score) + (0.25 * Experience_Score) + (0.20 * Domain_Score) + (0.15 * Education_Score)
-Scores must be objective, deterministic, and grounded entirely in the text of the documents. No inflated or arbitrary numbers.
+HYPERLINK ALL SKILLS:
+Every single core skill mentioned in the JD snapshot, candidate matching skills, and missing skills MUST be hyperlinked using markdown links to official documentation or top learning portals:
+- Examples: [Python](https://docs.python.org), [FastAPI](https://fastapi.tiangolo.com), [Docker](https://docs.docker.com), [Kubernetes](https://kubernetes.io/docs), [AWS](https://aws.amazon.com), [React](https://react.dev), [PostgreSQL](https://www.postgresql.org), [PyTorch](https://pytorch.org), [Terraform](https://www.terraform.io), [LangChain](https://python.langchain.com)
 
-HIGH-IMPACT VISUAL OUTPUT FORMAT:
-Whenever evaluating JDs and Resumes, ALWAYS present the evaluation in this clean, structured format:
+STRUCTURE FOR MULTIPLE JDs:
+If MULTIPLE Job Descriptions are uploaded:
+1. Provide a dedicated, SEPARATE evaluation section for EACH Job Description.
+   - For JD #1: Executive Snapshot + Comparison Table + Ranked Candidates with detailed scores & courses.
+   - For JD #2: Executive Snapshot + Comparison Table + Ranked Candidates with detailed scores & courses.
+2. At the end, provide a clear "🎯 OPTIMAL CANDIDATE-TO-ROLE PLACEMENT MATRIX" mapping each candidate to their single highest-fit job.
+
+STRUCTURE FOR EACH EVALUATION SECTION:
 
 ---
-🎯 *JOB DESCRIPTION SNAPSHOT*
-• *Role:* [Title]
-• *Experience Required:* [Experience range]
-• *Core Stack:* [Top 4-6 Technologies]
+⚡ *EXECUTIVE HIRING SNAPSHOT: [Job Title]*
+• *Target Role:* [Role Title]
+• *Required Experience:* [Experience range]
+• *Core Stack:* [[Skill 1](URL), [Skill 2](URL), [Skill 3](URL), [Skill 4](URL)]
+• *Top Recommended Candidate:* 🥇 [Candidate Name] (`[Score]%` — [🟢 Strong Match | 🟡 Moderate Match | 🔴 Low Match])
 • *Resumes Evaluated:* `[Count]`
 
 📋 *CANDIDATE COMPARISON MATRIX*
@@ -42,27 +47,24 @@ Candidate              Score   Skills Match   Status
 ```
 
 ═══════════════════════════════
-📊 *DETAILED ATS CANDIDATE BREAKDOWN*
+📊 *CANDIDATE ATS RANKINGS & DETAILED BREAKDOWN*
 ═══════════════════════════════
 
 *1. [Candidate Name]* (`[Filename]`)
 🏆 *ATS Score:* `[Score]%` — [🟢 Strong Match (>=80%) | 🟡 Moderate Match (60-79%) | 🔴 Low Match (<60%)]
-📊 *Visual Score:* `[████████████████░░░░] [Score]%`
-✅ *Skills Present:* [Comma-separated skills verified in resume]
-❌ *Skills Missing:* [Comma-separated skills required by JD but absent]
+📊 *Visual Progress:* `[████████████████░░░░] [Score]%`
+✅ *Skills Present:* [[Skill](URL), [Skill](URL)]
+❌ *Skills Missing:* [[Skill](URL), [Skill](URL)]
 💡 *Key Improvements:*
-  ▫️ [Concrete resume/portfolio improvement]
-  ▫️ [Specific production metric or project to add]
+  ▫️ [Concrete resume/portfolio enhancement with metrics]
+  ▫️ [Project or architecture recommendation]
 📚 *Recommended Courses:*
-  🔗 [[Course Title - Platform]]([Direct working URL to Coursera/Udemy/edX/freeCodeCamp/Harvard/Official Docs])
-  🔗 [[Course Title - Platform]]([Direct working URL])
+  🔗 [[Course Title - Platform]]([Working URL to Coursera/Udemy/edX/freeCodeCamp/Harvard CS50/DeepLearning.AI])
+  🔗 [[Course Title - Platform]]([Working URL])
 ───────────────────────────────
 ---
 
-If multiple JDs are provided:
-Repeat the evaluation for each JD, or provide a role-mapping matrix showing which candidate is the best fit for which specific role.
-
-If the user asks conversational questions, interview questions, or follow-ups:
+If conversational follow-ups or general questions are asked:
 Answer conversationally, precisely, and helpfully like ChatGPT/Gemini!
 """
 
@@ -123,27 +125,32 @@ def extract_candidate_scores_for_chart(text: str) -> List[Dict[str, Any]]:
     pattern = r"\*(\d+)\.\s*([^*]+)\*[\s\S]*?(?:ATS Score:|\bScore:)\s*`?(\d{1,3})%?`?"
     matches = re.findall(pattern, text)
     
+    seen = set()
     for _, name, score_str in matches:
         try:
             score = int(score_str)
             clean_name = name.split("(")[0].strip()
-            candidates.append({
-                "candidate_name": clean_name,
-                "ats_score": score
-            })
+            if clean_name not in seen:
+                seen.add(clean_name)
+                candidates.append({
+                    "candidate_name": clean_name,
+                    "ats_score": score
+                })
         except ValueError:
             continue
 
-    # Fallback pattern if numbered format wasn't strictly followed
     if not candidates:
         alt_pattern = r"(?:Candidate|Resume)[:\s]+([A-Za-z\s]+)[\s\S]*?(?:ATS Score:|\bScore:)\s*`?(\d{1,3})%?`?"
         alt_matches = re.findall(alt_pattern, text)
         for name, score_str in alt_matches:
             try:
-                candidates.append({
-                    "candidate_name": name.strip(),
-                    "ats_score": int(score_str)
-                })
+                cname = name.strip()
+                if cname not in seen:
+                    seen.add(cname)
+                    candidates.append({
+                        "candidate_name": cname,
+                        "ats_score": int(score_str)
+                    })
             except ValueError:
                 continue
 

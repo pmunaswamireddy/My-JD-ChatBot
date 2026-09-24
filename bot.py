@@ -1,4 +1,5 @@
 import asyncio
+import io
 import logging
 import sys
 from pathlib import Path
@@ -11,12 +12,15 @@ from telegram import (
     Update,
     ReplyKeyboardMarkup,
     KeyboardButton,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
     BotCommand
 )
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    CallbackQueryHandler,
     ContextTypes,
     filters
 )
@@ -29,8 +33,8 @@ from analyzer import (
     extract_candidate_scores_for_chart
 )
 from charts import generate_ats_chart
+from pdf_report import generate_audit_pdf
 from dispatchers import (
-
     dispatch_to_all_configured_channels,
     send_to_telegram,
     split_message
@@ -43,7 +47,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Persistent Main Keyboard
+# Persistent Main Bottom Keyboard
 MAIN_KEYBOARD = ReplyKeyboardMarkup(
     [
         [KeyboardButton("🚀 Analyze Resumes"), KeyboardButton("📊 Status")],
@@ -54,14 +58,28 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
     is_persistent=True
 )
 
-# User sessions: {chat_id: {"history": [...], "files": [...]}}
+# Interactive Inline Action Buttons (Attached directly under analysis message)
+def get_evaluation_inline_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📊 View Score Chart", callback_data="cb_chart"),
+            InlineKeyboardButton("📄 Download PDF Dossier", callback_data="cb_pdf")
+        ],
+        [
+            InlineKeyboardButton("🎯 Interview Questions", callback_data="cb_interview"),
+            InlineKeyboardButton("💡 Recommended Courses", callback_data="cb_courses")
+        ]
+    ])
+
+# User sessions: {chat_id: {"history": [...], "files": [...], "latest_report": str}}
 user_sessions: Dict[int, Dict[str, Any]] = {}
 
 def get_session(chat_id: int) -> Dict[str, Any]:
     if chat_id not in user_sessions:
         user_sessions[chat_id] = {
             "history": [],
-            "files": []
+            "files": [],
+            "latest_report": ""
         }
     return user_sessions[chat_id]
 
@@ -69,7 +87,7 @@ def get_session(chat_id: int) -> Dict[str, Any]:
 async def post_init(application):
     """Register official bot commands with Telegram."""
     commands = [
-        BotCommand("analyze", "Evaluate resumes against JD(s) (aliases: /analyse, /eval)"),
+        BotCommand("analyze", "Evaluate candidates against JDs (or /analyse)"),
         BotCommand("status", "View uploaded JDs and Resumes count"),
         BotCommand("demo", "Run live demo with sample files"),
         BotCommand("clear", "Reset session and uploaded files"),
@@ -82,15 +100,15 @@ async def post_init(application):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /start and /new."""
     chat_id = update.effective_chat.id
-    user_sessions[chat_id] = {"history": [], "files": []}
+    user_sessions[chat_id] = {"history": [], "files": [], "latest_report": ""}
     
     welcome_text = (
-        "👋 *Welcome to AI Job & Resume ATS Matcher Bot!*\n\n"
-        "I evaluate multiple resumes against your Job Description(s) using Gemini AI, "
-        "calculating exact ATS scores, missing skills, and curated courses with clickable links.\n\n"
-        "⚡ *Quick Navigation:* Use the persistent buttons below or send files anytime!\n\n"
+        "👋 *Welcome to AI Multi-JD & Resume ATS Intelligence Bot!*\n\n"
+        "I evaluate multiple resumes against single or multiple Job Descriptions using Gemini AI, "
+        "calculating exact ATS scores, missing skills, and hyperlinked courses.\n\n"
+        "⚡ *Quick Navigation:* Use the buttons below or upload files anytime!\n\n"
         "📁 *Supported Formats:* `.pdf`, `.docx`, `.doc`, `.txt`, `.rtf`, `.md`\n\n"
-        "1️⃣ Drag & drop your **Job Description (JD)**\n"
+        "1️⃣ Drag & drop your **Job Description(s)**\n"
         "2️⃣ Drag & drop **Candidate Resumes** (single or batch)\n"
         "3️⃣ Tap *🚀 Analyze Resumes* or send `/analyze` (or `/analyse`)!"
     )
@@ -100,10 +118,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /clear and '🧹 Clear Session'."""
     chat_id = update.effective_chat.id
-    user_sessions[chat_id] = {"history": [], "files": []}
+    user_sessions[chat_id] = {"history": [], "files": [], "latest_report": ""}
     await update.message.reply_text(
         "🧹 *Session cleared!* All previous files and chat memory have been reset.\n"
-        "Upload your new JD and resumes to start fresh.",
+        "Upload your new JDs and resumes to start fresh.",
         parse_mode="Markdown",
         reply_markup=MAIN_KEYBOARD
     )
@@ -177,9 +195,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "ℹ️ *How to use JD & Resume ATS Matcher Bot:*\n\n"
         "1. **Upload Files:** Drag & drop `.pdf`, `.docx`, `.doc`, or `.txt` files directly into this chat.\n"
-        "2. **Auto-Detection:** The bot automatically recognizes which files are JDs and which are Resumes.\n"
+        "2. **Multi-JD Support:** If you send multiple JDs, the bot evaluates each JD separately and maps optimal candidate placements!\n"
         "3. **Analyze:** Tap **🚀 Analyze Resumes** or send `/analyze` (or `/analyse`).\n"
-        "4. **Chat Naturally:** You can ask questions anytime (e.g. *\"Who has the best Python skills?\"* or *\"Why did candidate 2 score lower?\"*)\n\n"
+        "4. **Interactive Buttons:** Tap the buttons below evaluation messages to view Charts, download PDF Dossiers, or generate Interview Questions!\n\n"
         "🔘 *Persistent Buttons:*\n"
         "• **🚀 Analyze Resumes** — Triggers full ATS evaluation\n"
         "• **📊 Status** — Check loaded files\n"
@@ -208,7 +226,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     wait_msg = await update.message.reply_text(f"📥 Reading `{filename}`...", parse_mode="Markdown")
 
     extracted_text = ""
-    # Download with retry and extended timeout to handle parallel file uploads
     for attempt in range(2):
         try:
             tg_file = await doc.get_file(read_timeout=60, write_timeout=60, connect_timeout=30)
@@ -230,7 +247,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     doc_type = classify_document(extracted_text, filename)
     label = "Job Description" if doc_type == "job_description" else "Candidate Resume"
 
-    # Replace existing file with same name or add
     session["files"] = [f for f in session["files"] if f["name"] != filename]
     session["files"].append({
         "name": filename,
@@ -257,7 +273,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     text_lower = text.lower()
 
-    # 1. Button or Command Aliases
     if text in ["🚀 Analyze Resumes", "Analyze", "Analyse", "/analyze", "/analyse", "/eval", "/evaluate", "/rank", "/match"] or text_lower in ["analyze", "analyse", "evaluate", "analyze these", "analyse these"]:
         files = session.get("files", [])
         if not files:
@@ -267,7 +282,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=MAIN_KEYBOARD
             )
             return
-        await process_ai_interaction(update, chat_id, session, "Please evaluate all attached candidate resumes against the Job Description(s) and provide the structured ATS rankings, missing skills, and course recommendations.")
+        await process_ai_interaction(update, chat_id, session, "Please evaluate all candidate resumes against the Job Description(s). If multiple JDs are uploaded, separate the evaluations for each JD, and provide candidate-to-role placement.")
         return
 
     if text in ["📊 Status", "Status", "/status"] or text_lower == "status":
@@ -286,16 +301,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await help_command(update, context)
         return
 
-    # 2. Conversational greetings
     if text_lower in ["hi", "hello", "hey", "hola", "start", "good morning", "good evening"]:
         await update.message.reply_text(
-            f"👋 Hello! Ready to help you review candidates and match resumes against your Job Descriptions.\n\n"
-            f"You can attach files (PDF, DOCX, TXT) or tap any button below to get started!",
+            "👋 Hello! Ready to evaluate candidate resumes against your Job Descriptions with real ATS scoring.\n\n"
+            "Drop files (.pdf, .docx, .txt) or tap any button below to get started!",
             reply_markup=MAIN_KEYBOARD
         )
         return
 
-    # 3. General conversational queries
     await process_ai_interaction(update, chat_id, session, text)
 
 
@@ -331,6 +344,7 @@ async def process_ai_interaction(update: Update, chat_id: int, session: Dict[str
     )
 
     session["history"].append({"role": "assistant", "content": ai_response})
+    session["latest_report"] = ai_response
 
     try:
         await status_msg.delete()
@@ -338,24 +352,27 @@ async def process_ai_interaction(update: Update, chat_id: int, session: Dict[str
         pass
 
     chunks = split_message(ai_response, max_length=4000)
-    for chunk in chunks:
+    for idx, chunk in enumerate(chunks):
+        # Attach the interactive inline buttons to the final chunk
+        is_last_chunk = (idx == len(chunks) - 1)
+        inline_kb = get_evaluation_inline_keyboard() if (is_last_chunk and ("ATS Score:" in ai_response or "SNAPSHOT" in ai_response)) else None
+
         try:
             await update.message.reply_text(
                 chunk,
                 parse_mode="Markdown",
                 disable_web_page_preview=True,
-                reply_markup=MAIN_KEYBOARD
+                reply_markup=inline_kb or MAIN_KEYBOARD
             )
         except Exception:
             await update.message.reply_text(
                 chunk,
                 disable_web_page_preview=True,
-                reply_markup=MAIN_KEYBOARD
+                reply_markup=inline_kb or MAIN_KEYBOARD
             )
 
     # Multi-channel broadcast & Visual Graph Generation
     if "ATS Score:" in ai_response or "CANDIDATE ATS RANKINGS" in ai_response:
-        # Generate & Send High-Res Comparison Bar Chart
         try:
             candidates_for_chart = extract_candidate_scores_for_chart(ai_response)
             if candidates_for_chart:
@@ -382,6 +399,58 @@ async def process_ai_interaction(update: Update, chat_id: int, session: Dict[str
             await update.message.reply_text(f"📡 *Broadcast dispatched to:* {', '.join(active_dispatches)}", parse_mode="Markdown")
 
 
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles clicks on interactive inline buttons below messages."""
+    query = update.callback_query
+    await query.answer()
+    chat_id = update.effective_chat.id
+    session = get_session(chat_id)
+    latest_report = session.get("latest_report", "")
+
+    if query.data == "cb_chart":
+        candidates = extract_candidate_scores_for_chart(latest_report)
+        if candidates:
+            jds = [f["name"] for f in session.get("files", []) if f["type"] == "job_description"]
+            title = jds[0] if jds else "Candidate Fit Ranking"
+            chart_bytes = generate_ats_chart(candidates, title)
+            await query.message.reply_photo(
+                photo=chart_bytes,
+                caption="📊 *Candidate ATS Compatibility Chart*",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.message.reply_text("ℹ️ Please run an analysis first by tapping '🚀 Analyze Resumes'.")
+
+    elif query.data == "cb_pdf":
+        if latest_report:
+            wait = await query.message.reply_text("📄 *Compiling Executive Audit PDF Report...*", parse_mode="Markdown")
+            jds = [f["name"] for f in session.get("files", []) if f["type"] == "job_description"]
+            title = jds[0] if jds else "Executive ATS Dossier"
+            pdf_bytes = generate_audit_pdf(latest_report, title)
+            await wait.delete()
+            await query.message.reply_document(
+                document=io.BytesIO(pdf_bytes),
+                filename="Executive_ATS_Audit_Report.pdf",
+                caption="📄 *Executive ATS Candidate Audit Report (PDF)*",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.message.reply_text("ℹ️ Run an analysis first before downloading PDF.")
+
+    elif query.data == "cb_interview":
+        if latest_report:
+            prompt = "Based on the candidates evaluated and their specific missing skills, generate 3 rigorous technical interview questions and 2 behavioral questions tailored to vet their weak areas, along with model answers."
+            await process_ai_interaction(query, chat_id, session, prompt)
+        else:
+            await query.message.reply_text("ℹ️ Run an analysis first to generate tailored interview questions.")
+
+    elif query.data == "cb_courses":
+        if latest_report:
+            prompt = "Provide an enriched master learning curriculum with direct working hyperlinks (Coursera, edX, Udemy, freeCodeCamp, Harvard CS50, DeepLearning.AI) for all missing skills found across candidates."
+            await process_ai_interaction(query, chat_id, session, prompt)
+        else:
+            await query.message.reply_text("ℹ️ Run an analysis first to see course recommendations.")
+
 
 def main():
     """Main entrypoint for Telegram Bot."""
@@ -389,7 +458,7 @@ def main():
         print("⚠️ TELEGRAM_BOT_TOKEN is missing in .env")
         return
 
-    print("🤖 Starting Upgraded ATS Bot with persistent buttons & command aliases...")
+    print("🤖 Starting Upgraded ATS Bot with Inline Buttons & Multi-JD Support...")
     app = (
         ApplicationBuilder()
         .token(config.TELEGRAM_BOT_TOKEN)
@@ -400,7 +469,7 @@ def main():
         .build()
     )
 
-    # Command Handlers with full spelling and aliases support
+    # Command Handlers
     app.add_handler(CommandHandler(["start", "new"], start_command))
     app.add_handler(CommandHandler(["clear", "reset"], clear_command))
     app.add_handler(CommandHandler(["status"], status_command))
@@ -408,11 +477,14 @@ def main():
     app.add_handler(CommandHandler(["help", "guide"], help_command))
     app.add_handler(CommandHandler(["analyze", "analyse", "eval", "evaluate", "rank", "match"], lambda u, c: handle_text(u, c)))
 
+    # Inline Button Callbacks
+    app.add_handler(CallbackQueryHandler(handle_callback_query))
+
     # Document & Text handlers
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🚀 Bot is LIVE with persistent buttons! Press Ctrl+C to stop.")
+    print("🚀 Bot is LIVE with interactive inline buttons! Press Ctrl+C to stop.")
     app.run_polling()
 
 
