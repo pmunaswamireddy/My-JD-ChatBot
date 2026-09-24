@@ -2,7 +2,7 @@ import asyncio
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -19,11 +19,14 @@ from telegram.ext import (
 import config
 from parser import extract_text_from_bytes, extract_text_from_file
 from analyzer import (
-    analyze_resumes_with_gemini,
-    format_report_for_telegram,
-    format_report_for_discord
+    generate_conversational_response,
+    classify_document
 )
-from dispatchers import dispatch_to_all_configured_channels, send_to_telegram
+from dispatchers import (
+    dispatch_to_all_configured_channels,
+    send_to_telegram,
+    split_message
+)
 
 # Setup logging
 logging.basicConfig(
@@ -32,135 +35,116 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# User sessions stored in-memory: {chat_id: {"jd": str, "resumes": [{"name": str, "text": str}]}}
+# User sessions: {chat_id: {"history": [{"role": "user"|"assistant", "content": str}], "files": [{"name": str, "type": str, "text": str}]}}
 user_sessions: Dict[int, Dict[str, Any]] = {}
 
 def get_session(chat_id: int) -> Dict[str, Any]:
     if chat_id not in user_sessions:
-        user_sessions[chat_id] = {"jd": "", "resumes": []}
+        user_sessions[chat_id] = {
+            "history": [],
+            "files": []
+        }
     return user_sessions[chat_id]
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /start and /new."""
     chat_id = update.effective_chat.id
-    user_sessions[chat_id] = {"jd": "", "resumes": []}
+    user_sessions[chat_id] = {"history": [], "files": []}
     
     welcome_text = (
-        "🤖 *Welcome to JD & Resume ATS Matcher Bot!*\n\n"
-        "I evaluate multiple resumes against your Job Description with Gemini AI, "
-        "calculating ATS match scores, missing skills, improvement tips, and curated courses with direct links.\n\n"
-        "📋 *Quick Workflow:*\n"
-        "1️⃣ Send your *Job Description (JD)* (as a message or attach `.pdf`, `.docx`, `.txt`)\n"
-        "2️⃣ Send *Candidate Resumes* (attach 1 or multiple `.pdf`, `.docx`, `.txt` files)\n"
-        "3️⃣ Type /analyze to process and generate rankings!\n\n"
-        "💡 *Bonus Commands:*\n"
-        "• /demo — Test instantly with built-in sample JD & 2 resumes\n"
-        "• /status — Check current uploaded JD & resumes count\n"
-        "• /clear — Reset session"
+        "👋 *Hi! I am your AI Recruiter & ATS Intelligence Assistant.*\n\n"
+        "You can chat with me naturally just like ChatGPT or Gemini!\n\n"
+        "✨ *What you can do:*\n"
+        "• Send **one or multiple Job Descriptions (JDs)** (as documents or text)\n"
+        "• Send **multiple candidate resumes** (PDF, DOCX, TXT)\n"
+        "• Talk to me naturally: *\"Analyze these resumes against the JD\"* or *\"Compare these 3 candidates\"*\n"
+        "• Ask follow-ups: *\"Why did candidate X score lower?\"* or *\"Generate 5 interview questions for Alex\"*\n\n"
+        "⚡ *Quick Shortcuts:*\n"
+        "• `/demo` — Run an instant demo with preloaded JDs & resumes\n"
+        "• `/status` — View your uploaded files and active channels\n"
+        "• `/clear` — Reset conversation history and uploaded files"
     )
     await update.message.reply_text(welcome_text, parse_mode="Markdown")
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles /help."""
-    help_text = (
-        "📖 *How to use this Bot:*\n\n"
-        "1. *Upload Job Description:* Send a document (`.pdf`, `.docx`, `.txt`) or paste text.\n"
-        "2. *Upload Resumes:* Send candidate resume documents one by one.\n"
-        "3. *Analyze:* Send `/analyze` when you're ready.\n"
-        "4. *Multi-platform Broadcast:* If Discord or Slack webhooks are configured in `.env`, "
-        "the final rankings will also be automatically pushed there!\n\n"
-        "• /start - Begin new session\n"
-        "• /demo - Run instant demo with sample data\n"
-        "• /status - View uploaded count\n"
-        "• /clear - Clear files and start over"
-    )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles /clear."""
+    chat_id = update.effective_chat.id
+    user_sessions[chat_id] = {"history": [], "files": []}
+    await update.message.reply_text("🧹 *All conversation history and uploaded documents have been cleared!*", parse_mode="Markdown")
 
 
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles /status."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
-    jd = session.get("jd", "")
-    resumes = session.get("resumes", [])
+    files = session.get("files", [])
+    history_count = len(session.get("history", []))
 
-    jd_status = f"✅ Loaded ({len(jd.split())} words)" if jd else "❌ Not provided yet"
-    resumes_status = f"{len(resumes)} file(s) attached" if resumes else "0 attached"
-    
-    # Active integrations
-    integrations = ["Telegram"]
+    jds = [f["name"] for f in files if f["type"] == "job_description"]
+    resumes = [f["name"] for f in files if f["type"] == "resume"]
+
+    status_lines = [
+        "📊 *Current Session Overview:*",
+        f"• *Messages in Context:* `{history_count}`",
+        f"• *Job Descriptions ({len(jds)}):* {', '.join(jds) if jds else '_None uploaded yet_'}",
+        f"• *Resumes ({len(resumes)}):* {', '.join(resumes) if resumes else '_None uploaded yet_'}"
+    ]
+
+    channels = ["Telegram"]
     if config.DISCORD_WEBHOOK_URL:
-        integrations.append("Discord")
+        channels.append("Discord")
     if config.SLACK_WEBHOOK_URL:
-        integrations.append("Slack")
-    if config.GOOGLE_CHAT_WEBHOOK_URL:
-        integrations.append("Google Chat")
-    if config.WHATSAPP_WEBHOOK_URL:
-        integrations.append("WhatsApp")
+        channels.append("Slack")
+    status_lines.append(f"• *Active Broadcast Channels:* {', '.join(channels)}")
 
-    status_text = (
-        "📊 *Current Session Status:*\n"
-        f"• *Job Description:* {jd_status}\n"
-        f"• *Resumes Uploaded:* `{resumes_status}`\n"
-        f"• *Active Output Channels:* {', '.join(integrations)}\n\n"
-        + ("Ready! Type /analyze to process." if (jd and resumes) else "Please upload your JD and at least 1 resume.")
-    )
-    await update.message.reply_text(status_text, parse_mode="Markdown")
+    if not files:
+        status_lines.append("\n💡 _Attach your JD and resume documents or paste text to begin!_")
+    else:
+        status_lines.append("\n💡 _You can ask me anything about these files or tell me to evaluate them!_")
 
-
-async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles /clear."""
-    chat_id = update.effective_chat.id
-    user_sessions[chat_id] = {"jd": "", "resumes": []}
-    await update.message.reply_text("🧹 Session cleared! Send a new Job Description to begin.", parse_mode="Markdown")
+    await update.message.reply_text("\n".join(status_lines), parse_mode="Markdown")
 
 
 async def demo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Instantly loads sample JD and 2 resumes and runs analysis."""
+    """Loads sample files and triggers conversational analysis."""
     chat_id = update.effective_chat.id
+    session = get_session(chat_id)
     sample_dir = Path(__file__).resolve().parent / "sample_data"
-    
+
     jd_file = sample_dir / "sample_jd.txt"
     r1_file = sample_dir / "resume_alex_rivers.txt"
     r2_file = sample_dir / "resume_sarah_chen.txt"
 
     if not jd_file.exists() or not r1_file.exists():
-        await update.message.reply_text("❌ Sample files not found in `sample_data/` folder.", parse_mode="Markdown")
+        await update.message.reply_text("❌ Sample files not found.")
         return
 
-    jd_text = extract_text_from_file(str(jd_file))
-    r1_text = extract_text_from_file(str(r1_file))
-    r2_text = extract_text_from_file(str(r2_file))
-
-    session = get_session(chat_id)
-    session["jd"] = jd_text
-    session["resumes"] = [
-        {"name": "Alex_Rivers_Resume.txt", "text": r1_text},
-        {"name": "Sarah_Chen_Resume.txt", "text": r2_text}
+    session["files"] = [
+        {"name": "Senior_AI_Engineer_JD.txt", "type": "job_description", "text": extract_text_from_file(str(jd_file))},
+        {"name": "Alex_Rivers_Resume.docx", "type": "resume", "text": extract_text_from_file(str(r1_file))},
+        {"name": "Sarah_Chen_Resume.docx", "type": "resume", "text": extract_text_from_file(str(r2_file))}
     ]
 
     await update.message.reply_text(
-        "🚀 *Demo Loaded Successfully!*\n"
-        "• *JD:* Senior Full-Stack AI Engineer\n"
-        "• *Resumes:* Alex Rivers (Senior), Sarah Chen (Junior)\n\n"
-        "⏳ *Analyzing candidate ATS scores & recommended courses with Gemini AI...*",
+        "🚀 *Demo Loaded:* 1 Job Description + 2 Resumes (Alex Rivers & Sarah Chen).\n"
+        "⏳ *Analyzing candidate fit with Gemini AI...*",
         parse_mode="Markdown"
     )
 
-    await run_analysis(update, chat_id, session)
+    prompt = "Please evaluate all candidate resumes against the Job Description and provide the structured ATS rankings, missing skills, and course recommendations."
+    await process_ai_interaction(update, chat_id, session, prompt)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles incoming file uploads (PDF, DOCX, TXT)."""
+    """Handles uploaded files (.pdf, .docx, .txt)."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
     doc = update.message.document
     filename = doc.file_name or "document"
-    
-    # Check supported extensions
     ext = Path(filename).suffix.lower()
+
     if ext not in [".pdf", ".docx", ".doc", ".txt", ".md"]:
         await update.message.reply_text(
             f"⚠️ Unsupported format `{ext}`. Please upload `.pdf`, `.docx`, or `.txt` files.",
@@ -168,160 +152,135 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Download file in memory
-    status_msg = await update.message.reply_text(f"📥 Downloading `{filename}`...", parse_mode="Markdown")
+    wait_msg = await update.message.reply_text(f"📥 Reading `{filename}`...", parse_mode="Markdown")
+
     try:
         tg_file = await doc.get_file()
         file_bytes = await tg_file.download_as_bytearray()
         extracted_text = extract_text_from_bytes(bytes(file_bytes), filename)
-        
+
         if not extracted_text:
-            await status_msg.edit_text(f"❌ Could not extract text from `{filename}`. Please check the file.")
+            await wait_msg.edit_text(f"❌ Could not extract readable text from `{filename}`.")
             return
 
-        # Assign to JD if not already set, otherwise add to resumes
-        if not session["jd"]:
-            session["jd"] = extracted_text
-            await status_msg.edit_text(
-                f"✅ *Job Description Loaded!* (`{filename}`)\n\n"
-                f"Now send candidate resumes (PDF, DOCX, TXT). You can send multiple files.\n"
-                f"When done, type /analyze.",
-                parse_mode="Markdown"
-            )
-        else:
-            session["resumes"].append({"name": filename, "text": extracted_text})
-            count = len(session["resumes"])
-            await status_msg.edit_text(
-                f"📄 *Resume Added #{count}:* `{filename}`\n\n"
-                f"Send another resume or type /analyze to evaluate.",
-                parse_mode="Markdown"
-            )
+        doc_type = classify_document(extracted_text, filename)
+        label = "Job Description" if doc_type == "job_description" else "Candidate Resume"
+
+        # Check if already added
+        session["files"] = [f for f in session["files"] if f["name"] != filename]
+        session["files"].append({
+            "name": filename,
+            "type": doc_type,
+            "text": extracted_text
+        })
+
+        jds = [f["name"] for f in session["files"] if f["type"] == "job_description"]
+        resumes = [f["name"] for f in session["files"] if f["type"] == "resume"]
+
+        await wait_msg.edit_text(
+            f"✅ *Received:* `{filename}`\n"
+            f"🔍 *Detected as:* `{label}`\n\n"
+            f"📂 *Current Attachments:* `{len(jds)}` JD(s), `{len(resumes)}` Resume(s).\n\n"
+            "💬 You can upload more files, or type *\"Analyze these resumes\"* or ask any question!",
+            parse_mode="Markdown"
+        )
 
     except Exception as e:
-        logger.error(f"Error processing file: {e}")
-        await status_msg.edit_text(f"❌ Error downloading file: {e}")
+        logger.error(f"Error handling document: {e}")
+        await wait_msg.edit_text(f"❌ Error processing file: {e}")
 
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles plain text messages (used for pasting JD)."""
+    """Handles natural conversational text from the user."""
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
-    text = update.message.text.strip()
+    user_text = update.message.text.strip()
 
-    if not session["jd"]:
-        session["jd"] = text
-        await update.message.reply_text(
-            "✅ *Job Description Text Received!*\n\n"
-            "Now upload candidate resumes (`.pdf`, `.docx`, or `.txt` files).\n"
-            "Send /analyze when ready.",
-            parse_mode="Markdown"
-        )
-    else:
-        await update.message.reply_text(
-            "💡 You have already loaded a Job Description.\n"
-            f"Currently holding `{len(session['resumes'])}` resume(s).\n\n"
-            "• Attach a resume file (`.pdf`/`.docx`/`.txt`) to add candidates.\n"
-            "• Type /analyze to process.\n"
-            "• Type /clear to reset.",
-            parse_mode="Markdown"
-        )
+    await process_ai_interaction(update, chat_id, session, user_text)
 
 
-async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles /analyze command."""
-    chat_id = update.effective_chat.id
-    session = get_session(chat_id)
+async def process_ai_interaction(update: Update, chat_id: int, session: Dict[str, Any], user_text: str):
+    """Processes conversational message with attached documents context."""
+    # Build prompt incorporating current attached files if available
+    attached_context = ""
+    if session.get("files"):
+        attached_context = "\n=== ATTACHED DOCUMENTS IN THIS SESSION ===\n"
+        for idx, f in enumerate(session["files"], 1):
+            type_label = "JOB DESCRIPTION" if f["type"] == "job_description" else "CANDIDATE RESUME"
+            attached_context += f"\n--- DOCUMENT #{idx}: {f['name']} ({type_label}) ---\n{f['text']}\n"
 
-    if not session.get("jd"):
-        await update.message.reply_text(
-            "❌ No Job Description found! Please send your JD first (text or document).",
-            parse_mode="Markdown"
-        )
-        return
+    # User message payload
+    augmented_user_message = user_text
+    if attached_context and len(session["history"]) == 0:
+        augmented_user_message = f"{user_text}\n{attached_context}"
+    elif attached_context:
+        augmented_user_message = f"{user_text}\n(Note: Current attached files:\n{attached_context})"
 
-    if not session.get("resumes"):
-        await update.message.reply_text(
-            "❌ No candidate resumes found! Please upload at least one resume (`.pdf`, `.docx`, or `.txt`).",
-            parse_mode="Markdown"
-        )
-        return
+    # Append to history
+    session["history"].append({"role": "user", "content": augmented_user_message})
 
-    await update.message.reply_text(
-        f"⏳ *Processing {len(session['resumes'])} resume(s) with Gemini AI...*\n"
-        "Calculating ATS scores, missing skills, and course recommendations...",
-        parse_mode="Markdown"
-    )
+    # Keep conversation history bounded to last 10 messages for speed & tokens
+    if len(session["history"]) > 10:
+        session["history"] = session["history"][-10:]
 
-    await run_analysis(update, chat_id, session)
+    status_msg = await update.message.reply_text("🤔 *Analyzing context...*", parse_mode="Markdown")
 
-
-async def run_analysis(update: Update, chat_id: int, session: Dict[str, Any]):
-    """Executes the analysis, replies in Telegram and broadcasts to configured channels."""
-    jd_text = session["jd"]
-    resumes = session["resumes"]
-
-    # Run analysis (synchronous call offloaded to thread)
     loop = asyncio.get_running_loop()
-    analysis_data = await loop.run_in_executor(
+    ai_response = await loop.run_in_executor(
         None,
-        analyze_resumes_with_gemini,
-        jd_text,
-        resumes,
+        generate_conversational_response,
+        session["history"],
         config.GEMINI_API_KEY,
         config.GEMINI_MODEL
     )
 
-    # Format reports
-    telegram_report = format_report_for_telegram(analysis_data)
-    discord_report = format_report_for_discord(analysis_data)
+    # Save assistant response to history
+    session["history"].append({"role": "assistant", "content": ai_response})
 
-    # Send directly to the Telegram user
-    send_to_telegram(config.TELEGRAM_BOT_TOKEN, str(chat_id), telegram_report)
+    # Send response to Telegram (chunked if long)
+    await status_msg.delete()
+    chunks = split_message(ai_response, max_length=4000)
+    for chunk in chunks:
+        try:
+            await update.message.reply_text(chunk, parse_mode="Markdown", disable_web_page_preview=True)
+        except Exception:
+            # Fallback to plain text if markdown formatting is invalid
+            await update.message.reply_text(chunk, disable_web_page_preview=True)
 
-    # Broadcast to other channels (Discord, Slack, Google Chat, WhatsApp)
-    dispatched = dispatch_to_all_configured_channels(
-        report_telegram=telegram_report,
-        report_discord=discord_report,
-        config_obj=config,
-        current_chat_id=None # Already sent above
-    )
-
-    # Notify if multi-platform dispatch occurred
-    active_dispatches = [k for k, v in dispatched.items() if v]
-    if active_dispatches:
-        await update.message.reply_text(
-            f"📡 *Multi-channel broadcast sent to:* {', '.join(active_dispatches)}",
-            parse_mode="Markdown"
+    # If this was an ATS evaluation, broadcast to Discord / multi-channels as well
+    if "ATS Score:" in ai_response or "CANDIDATE ATS RANKINGS" in ai_response:
+        dispatched = dispatch_to_all_configured_channels(
+            report_telegram=ai_response,
+            report_discord=ai_response,
+            config_obj=config,
+            current_chat_id=None
         )
+        active_dispatches = [k for k, v in dispatched.items() if v]
+        if active_dispatches:
+            await update.message.reply_text(f"📡 *Broadcast dispatched to:* {', '.join(active_dispatches)}", parse_mode="Markdown")
 
 
 def main():
     """Main entrypoint for Telegram Bot."""
     if not config.TELEGRAM_BOT_TOKEN:
-        print("\n" + "="*60)
-        print("⚠️  TELEGRAM_BOT_TOKEN is not set in .env!")
-        print("1. Open Telegram and search for @BotFather")
-        print("2. Send /newbot, give it a name, and copy the HTTP API token")
-        print("3. Paste it into .env: TELEGRAM_BOT_TOKEN=your_token_here")
-        print("="*60 + "\n")
+        print("⚠️ TELEGRAM_BOT_TOKEN is missing in .env")
         return
 
-    print("🤖 Starting Telegram ATS Match Bot...")
+    print("🤖 Starting Context-Aware Conversational ATS Bot...")
     app = ApplicationBuilder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     # Commands
     app.add_handler(CommandHandler(["start", "new"], start_command))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("clear", clear_command))
+    app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("demo", demo_command))
-    app.add_handler(CommandHandler("analyze", analyze_command))
+    app.add_handler(CommandHandler("analyze", lambda u, c: process_ai_interaction(u, u.effective_chat.id, get_session(u.effective_chat.id), "Please analyze all attached resumes against the Job Description(s).")))
 
-    # Document & Text handlers
+    # Natural conversation & file handlers
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
-    print("🚀 Bot is LIVE and listening for messages! Press Ctrl+C to stop.")
+    print("🚀 Bot is LIVE! Contextual chat active. Press Ctrl+C to stop.")
     app.run_polling()
 
 
