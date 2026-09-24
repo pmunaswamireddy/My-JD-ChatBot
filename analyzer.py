@@ -71,31 +71,44 @@ JSON SCHEMA:
 {combined_resumes}
 """
 
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                response_mime_type="application/json"
+    candidate_models = [model_name, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-1.5-flash"]
+    # Remove duplicates preserving order
+    seen = set()
+    models_to_try = [m for m in candidate_models if m and not (m in seen or seen.add(m))]
+
+    last_error = None
+    for m in models_to_try:
+        try:
+            response = client.models.generate_content(
+                model=m,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    response_mime_type="application/json"
+                )
             )
-        )
-        
-        response_text = response.text.strip()
-        # Clean any accidental markdown backticks
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-        response_text = response_text.strip()
+            
+            response_text = response.text.strip()
+            # Clean markdown backticks
+            if response_text.startswith("```json"):
+                response_text = response_text[7:]
+            if response_text.startswith("```"):
+                response_text = response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
 
-        data = json.loads(response_text)
-        return data
+            data = json.loads(response_text)
+            return data
 
-    except Exception as e:
-        print(f"[Gemini Analysis Error]: {e}")
-        # Fallback to local heuristic evaluator if API error occurs
-        return mock_fallback_analysis(jd_text, resumes, error_note=str(e))
+        except Exception as e:
+            last_error = e
+            print(f"[Gemini Try with {m} failed]: {e}")
+            continue
+
+    print(f"[All Gemini Models failed]: {last_error}")
+    return mock_fallback_analysis(jd_text, resumes, error_note=str(last_error))
+
 
 
 def mock_fallback_analysis(jd_text: str, resumes: List[Dict[str, str]], error_note: str = "") -> Dict[str, Any]:

@@ -1,7 +1,11 @@
 import asyncio
 import logging
+import sys
 from pathlib import Path
 from typing import Dict, Any
+
+if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 from telegram import Update
 from telegram.ext import (
