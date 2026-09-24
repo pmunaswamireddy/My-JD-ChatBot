@@ -1,0 +1,24 @@
+EMILY WATSON
+Email: emily.watson@example.com | Phone: +1-555-099-2345
+Location: Boston, MA
+
+PROFESSIONAL SUMMARY
+Data Analyst with 2.5 years of experience delivering actionable business intelligence, KPI dashboards, and statistical reporting. Transitioning into data science and machine learning.
+
+TECHNICAL SKILLS
+- Analytics: SQL, Excel (VLOOKUP, Pivot Tables), Tableau, PowerBI
+- Languages: Python (Pandas, Matplotlib, Seaborn), basic R
+- Concepts: Descriptive Statistics, A/B Testing, Data Cleansing, Data Storytelling
+
+EXPERIENCE
+Business Data Analyst | Beacon Financial Group (2022 - Present)
+- Created interactive Tableau dashboards monitoring monthly revenue and customer acquisition channels.
+- Authored complex SQL queries across Snowflake data warehouses to extract cohorts and behavioral metrics.
+- Presented monthly executive summaries to leadership teams.
+
+Junior Analyst | Insight Partners (2021 - 2022)
+- Cleaned and prepared multi-source marketing datasets using Excel and Python Pandas.
+- Automated weekly metric tracking, saving 5 hours of manual reporting every week.
+
+EDUCATION
+B.A. in Economics & Statistics | Boston University (2017 - 2021)

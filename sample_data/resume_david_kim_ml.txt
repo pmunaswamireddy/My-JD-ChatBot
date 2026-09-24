@@ -1,0 +1,26 @@
+DAVID KIM
+Email: david.kim@example.com | Phone: +1-555-081-3921 | GitHub: github.com/davidkim-ml
+Location: Seattle, WA
+
+PROFESSIONAL SUMMARY
+Senior Machine Learning Engineer with 5 years of experience researching, building, and deploying deep learning and NLP models into production. Expert in PyTorch, Scikit-Learn, MLOps, and automated feature engineering.
+
+TECHNICAL SKILLS
+- Languages: Python, SQL, C++
+- ML & Deep Learning: PyTorch, TensorFlow, Scikit-Learn, Hugging Face Transformers, XGBoost, LightGBM
+- Data Engineering: Pandas, NumPy, Apache Spark, PostgreSQL
+- MLOps & Cloud: Docker, FastAPI, MLflow, AWS SageMaker, Git, CI/CD
+
+EXPERIENCE
+Senior ML Engineer | Cortex AI (2022 - Present)
+- Architected NLP classification and semantic search service using Hugging Face Transformers and PyTorch, achieving 94% F1-score.
+- Built automated MLflow tracking pipelines reducing model iteration cycle time by 40%.
+- Packaged models inside Docker containers and deployed low-latency REST endpoints via FastAPI on AWS.
+
+Data Scientist | DataVibe Analytics (2019 - 2022)
+- Built churn prediction and customer lifetime value models using XGBoost and Scikit-Learn.
+- Processed 10TB+ clickstream datasets utilizing Apache Spark and SQL.
+
+EDUCATION
+M.S. in Computer Science (Machine Learning) | University of Washington (2017 - 2019)
+B.S. in Applied Mathematics | University of Washington (2013 - 2017)

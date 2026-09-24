@@ -1,0 +1,27 @@
+ALEX RIVERS
+Email: alex.rivers@example.com | Phone: +1-555-019-2834 | GitHub: github.com/alexrivers
+Location: San Francisco, CA
+
+SUMMARY
+Senior Software Engineer with 4.5 years of experience building scalable web architectures, microservices, and AI-powered integrations. Proven expertise in Python, FastAPI, React, and Google Gemini LLM orchestration.
+
+TECHNICAL SKILLS
+- Programming: Python, TypeScript, JavaScript, SQL
+- Frameworks: FastAPI, Flask, React.js, Next.js, Node.js
+- AI & LLM: Google Gemini API, OpenAI API, LangChain, RAG architectures, Prompt Engineering
+- Databases: PostgreSQL, Redis, Pinecone Vector Database
+- Cloud & DevOps: Docker, AWS (S3, ECS, Lambda), GitHub Actions CI/CD, Git
+
+EXPERIENCE
+Lead Software Engineer | Apex AI Labs (2022 - Present)
+- Developed and deployed multi-tenant conversational AI assistants utilizing Google Gemini and FastAPI.
+- Implemented RAG pipeline with Pinecone and PostgreSQL pgvector, cutting query response times by 35%.
+- Containerized microservices using Docker and orchestrated deployment via AWS ECS with automated CI/CD.
+
+Full Stack Developer | CloudScale Solutions (2020 - 2022)
+- Built interactive customer dashboards in React and Next.js, serving 50k+ daily active users.
+- Designed RESTful APIs in Python and integrated third-party webhooks (Telegram, Slack).
+- Collaborated in an agile scrum team to write unit and integration tests.
+
+EDUCATION
+B.S. in Computer Science | University of California, Berkeley (2016 - 2020)

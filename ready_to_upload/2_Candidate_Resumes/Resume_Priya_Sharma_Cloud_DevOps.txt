@@ -1,0 +1,27 @@
+PRIYA SHARMA
+Email: priya.sharma@example.com | Phone: +1-555-072-4411 | LinkedIn: linkedin.com/in/priyasharma-devops
+Location: Chicago, IL
+
+PROFESSIONAL SUMMARY
+Lead Cloud & DevOps Engineer with 6+ years of experience designing high-availability cloud infrastructure, Kubernetes clusters, and GitOps delivery pipelines. Certified Kubernetes Administrator (CKA) and AWS Solutions Architect.
+
+TECHNICAL SKILLS
+- Cloud Platforms: AWS (EKS, EC2, RDS, S3, IAM, CloudFront), Google Cloud Platform (GCP)
+- Orchestration & Containers: Kubernetes, Docker, Helm, ArgoCD
+- Infrastructure as Code: Terraform, Ansible
+- CI/CD Pipelines: GitHub Actions, GitLab CI, Jenkins
+- Scripting: Bash, Python
+- Monitoring & Reliability: Prometheus, Grafana, Datadog, ELK Stack
+
+EXPERIENCE
+Lead DevOps Engineer | Nexus Cloud Systems (2021 - Present)
+- Architected multi-region Kubernetes (EKS) infrastructure handling 20M+ daily API requests with 99.99% uptime.
+- Transitioned 80+ microservices to GitOps workflows using ArgoCD and Helm.
+- Authored modular Terraform codebases managing 500+ AWS resources across staging and production.
+
+Cloud Operations Engineer | Stratos Technologies (2018 - 2021)
+- Automated deployment pipelines using GitHub Actions and Docker, reducing release time from 45m to 8m.
+- Configured real-time cluster alerting and SLO dashboards with Prometheus and Grafana.
+
+EDUCATION
+B.S. in Computer Engineering | University of Illinois Urbana-Champaign (2014 - 2018)

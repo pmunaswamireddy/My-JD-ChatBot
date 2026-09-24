@@ -4,6 +4,7 @@ Allows adding, committing, and pushing to https://github.com/pmunaswamireddy/My-
 """
 import sys
 import os
+import getpass
 from pathlib import Path
 import dulwich.porcelain as git
 from dulwich.repo import Repo
@@ -24,7 +25,7 @@ def sync_repo(commit_message: str = "Initial commit: Complete JD & Resume ATS Ma
         repo = git.init(str(REPO_DIR))
         print("✓ Initialized Git repository")
 
-    # 2. Stage files
+    # 2. Stage all project files (excluding .env, venv, caches)
     files_to_add = [
         "requirements.txt",
         ".gitignore",
@@ -32,17 +33,25 @@ def sync_repo(commit_message: str = "Initial commit: Complete JD & Resume ATS Ma
         "config.py",
         "parser.py",
         "analyzer.py",
+        "charts.py",
+        "pdf_report.py",
         "dispatchers.py",
         "bot.py",
+        "generate_pdfs.py",
         "test_system.py",
+        "start_bot.bat",
+        "open_test_files.bat",
         "README.md",
-        "sample_data/sample_jd.txt",
-        "sample_data/resume_alex_rivers.txt",
-        "sample_data/resume_sarah_chen.txt",
         "git_sync.py"
     ]
     
-    existing_files = [f for f in files_to_add if (REPO_DIR / f).exists()]
+    # Add files from ready_to_upload and sample_data
+    for p in (REPO_DIR / "sample_data").glob("*.*"):
+        files_to_add.append(str(p.relative_to(REPO_DIR)).replace("\\", "/"))
+    for p in (REPO_DIR / "ready_to_upload").rglob("*.*"):
+        files_to_add.append(str(p.relative_to(REPO_DIR)).replace("\\", "/"))
+
+    existing_files = [f for f in set(files_to_add) if (REPO_DIR / f).exists()]
     git.add(str(REPO_DIR), existing_files)
     print(f"✓ Staged {len(existing_files)} project files")
 
@@ -66,22 +75,49 @@ def sync_repo(commit_message: str = "Initial commit: Complete JD & Resume ATS Ma
 
     print("\n🚀 Ready to push!")
     print("To push to your GitHub repo, run:")
-    print("  python git_sync.py --push <YOUR_GITHUB_TOKEN_OR_PASSWORD>")
+    print("  python git_sync.py --push <YOUR_GITHUB_TOKEN>")
+
+
+def push_to_github(token: str):
+    token = token.strip()
+    if token.startswith("http"):
+        print("\n❌ Error: You passed the repository URL instead of your Personal Access Token!")
+        print("To push, GitHub requires an access token (format: ghp_xxxxxxxxxxxxxxxxxxxx)")
+        print("\n👉 How to generate one in 20 seconds:")
+        print("1. Open: https://github.com/settings/tokens")
+        print("2. Click 'Generate new token (classic)'")
+        print("3. Check the 'repo' scope and click Generate")
+        print("4. Run: python git_sync.py --push <YOUR_TOKEN>\n")
+        return
+
+    push_url = REMOTE_URL.replace("https://", f"https://{token}@")
+    print(f"\nPushing to {REMOTE_URL} (branch: main)...")
+    try:
+        git.push(str(REPO_DIR), push_url, refspecs=[b"HEAD:refs/heads/main"])
+        print("\n🎉 SUCCESS! All files have been pushed to https://github.com/pmunaswamireddy/My-JD-ChatBot.git")
+    except Exception as e:
+        # Try pushing to master if main branch does not exist on remote
+        try:
+            print("Trying master branch...")
+            git.push(str(REPO_DIR), push_url, refspecs=[b"HEAD:refs/heads/master"])
+            print("\n🎉 SUCCESS! All files have been pushed to master branch on GitHub!")
+        except Exception as e2:
+            print(f"❌ Push error: {e2}")
+            print("Tip: Make sure your token has 'repo' permissions enabled.")
+
 
 if __name__ == "__main__":
-    msg = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "feat: JD ATS Matcher with Telegram bot, Gemini AI & Multi-channel Dispatcher"
+    msg = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("--") else "feat: complete JD ATS recruiter bot with Telegram, charts, PDF dossier, and multi-channel"
     sync_repo(msg)
     
     if "--push" in sys.argv:
         token_idx = sys.argv.index("--push") + 1
         if token_idx < len(sys.argv):
             token = sys.argv[token_idx]
-            push_url = REMOTE_URL.replace("https://", f"https://{token}@")
-            print(f"Pushing to {REMOTE_URL}...")
-            try:
-                git.push(str(REPO_DIR), push_url, refspecs=[b"HEAD:refs/heads/main"])
-                print("🎉 Successfully pushed to GitHub!")
-            except Exception as e:
-                print(f"❌ Push error: {e}")
+            push_to_github(token)
         else:
-            print("⚠️ Please provide GitHub personal access token: python git_sync.py --push <TOKEN>")
+            token = input("\nEnter your GitHub Personal Access Token (ghp_...): ").strip()
+            if token:
+                push_to_github(token)
+            else:
+                print("⚠️ Token cannot be empty.")

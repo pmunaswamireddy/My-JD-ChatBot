@@ -1,0 +1,22 @@
+Job Title: Senior Machine Learning Engineer / Data Scientist
+Company: Horizon Data Intelligence
+Experience: 3-6 Years
+Location: Remote
+
+Overview:
+We are seeking an experienced ML Engineer to develop, train, and deploy predictive models and deep learning pipelines. You will work on tabular data, NLP transformers, and model serving systems.
+
+Key Responsibilities:
+- Design end-to-end Machine Learning pipelines from data preprocessing to model deployment.
+- Train and fine-tune models using PyTorch, TensorFlow, Scikit-Learn, and Hugging Face Transformers.
+- Build scalable feature engineering workflows with Pandas, NumPy, and Apache Spark.
+- Implement model evaluation metrics (AUC-ROC, F1-Score, RMSE) and hyperparameter tuning.
+- Deploy models as REST microservices with FastAPI, Docker, and MLflow / Triton Inference Server.
+- Collaborate with software engineers to integrate models into production environments.
+
+Requirements:
+- Core Languages: Python, SQL
+- ML/DL Frameworks: PyTorch, Scikit-Learn, Hugging Face, XGBoost, LightGBM
+- Data Tools: Pandas, NumPy, Apache Spark
+- MLOps & Deployment: Docker, FastAPI, MLflow, AWS SageMaker
+- Strong understanding of statistical modeling, linear algebra, and data validation.

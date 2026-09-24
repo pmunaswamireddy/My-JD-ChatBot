@@ -1,0 +1,22 @@
+Job Title: Senior DevOps & Cloud Infrastructure Engineer
+Company: CloudScale Networks
+Experience: 4-7 Years
+Location: Hybrid / Remote
+
+Overview:
+We are looking for a Senior DevOps Engineer to lead our cloud infrastructure automation, CI/CD modernization, and Kubernetes platform management.
+
+Responsibilities:
+- Build and maintain resilient Infrastructure as Code (IaC) using Terraform and Ansible.
+- Manage multi-cluster Kubernetes environments on AWS (EKS) and Google Cloud (GKE).
+- Design automated CI/CD pipelines with GitHub Actions, GitLab CI, and ArgoCD.
+- Monitor system reliability, uptime, and performance using Prometheus, Grafana, and Datadog.
+- Implement security best practices, secrets management (HashiCorp Vault), and IAM policies.
+
+Requirements:
+- Cloud Providers: AWS (EC2, EKS, RDS, S3) or GCP
+- Container & Orchestration: Docker, Kubernetes, Helm, ArgoCD
+- Infrastructure as Code: Terraform, Ansible
+- CI/CD: GitHub Actions, Jenkins, or GitLab CI
+- Scripting & Automation: Bash, Python, Linux system administration
+- Observability: Prometheus, Grafana, ELK Stack

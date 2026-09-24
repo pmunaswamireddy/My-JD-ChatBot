@@ -1,0 +1,25 @@
+MICHAEL BROWN
+Email: michael.brown@example.com | Phone: +1-555-032-1188
+Location: Denver, CO
+
+PROFESSIONAL SUMMARY
+Full Stack Web Developer with 3 years of experience creating dynamic web applications with Node.js, Express, React, and Python. Passionate about API design, state management, and modern user experiences.
+
+TECHNICAL SKILLS
+- Languages: JavaScript (ES6+), Python, HTML5, CSS3, SQL
+- Frameworks: React.js, Node.js, Express.js, TailwindCSS
+- Databases: PostgreSQL, MongoDB, Redis
+- Tools: Git, Docker, Postman, Webpack
+
+EXPERIENCE
+Full Stack Developer | Summit Tech Media (2022 - Present)
+- Developed customer-facing React components with Redux Toolkit for complex dashboard interfaces.
+- Created RESTful microservices in Node.js and Express connected to PostgreSQL.
+- Implemented JWT-based authentication and role-based access control.
+
+Junior Web Developer | PixelCraft Studio (2021 - 2022)
+- Built interactive landing pages and e-commerce UI widgets using React and CSS modules.
+- Assisted in database schema design and automated unit testing.
+
+EDUCATION
+B.S. in Information Systems | University of Colorado Boulder (2017 - 2021)

@@ -1,0 +1,23 @@
+Job Title: Senior Full-Stack AI Engineer
+Company: TechNova Solutions
+Experience: 3-5 Years
+Location: Remote / Hybrid
+
+Role Overview:
+We are looking for a Senior Full-Stack AI Engineer to design and deploy AI-driven web applications. You will collaborate with product and ML teams to build robust APIs, intuitive frontend interfaces, and integrate LLM pipelines.
+
+Key Responsibilities:
+- Build and maintain modern full-stack web applications using Python (FastAPI/Django) and React / Next.js.
+- Integrate Large Language Models (LLMs) using Google Gemini or OpenAI APIs with LangChain / LlamaIndex.
+- Architect real-time messaging and bot integrations (Telegram, Discord, Slack webhooks).
+- Implement relational and vector databases (PostgreSQL, pgvector, Pinecone).
+- Deploy scalable containerized microservices using Docker, Kubernetes, and AWS (ECS, S3).
+- Write automated unit tests, CI/CD pipelines, and maintain high code quality.
+
+Requirements & Skills:
+- Core Languages: Python, TypeScript / JavaScript
+- Frameworks: FastAPI, React / Next.js, Node.js
+- AI/ML Tools: Google Gemini API / OpenAI API, Prompt Engineering, RAG (Retrieval-Augmented Generation)
+- Databases: PostgreSQL, Redis, Vector DB (Pinecone/ChromaDB)
+- DevOps & Cloud: Docker, Git, AWS (or GCP), CI/CD pipelines
+- Strong communication, problem-solving, and team collaboration skills.
