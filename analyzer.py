@@ -179,15 +179,16 @@ def extract_candidate_scores_for_chart(text: str) -> List[Dict[str, Any]]:
     to generate graphical charts.
     """
     candidates = []
-    pattern = r"\*(\d+)\.\s*([^*]+)\*[\s\S]*?(?:ATS Score:|\bScore:)\s*`?(\d{1,3})%?`?"
-    matches = re.findall(pattern, text)
+    # Pattern 1: *1. Name* ... *ATS Score:* `88%`
+    pattern = r"\*(\d+)\.\s*([^*\n]+)\*[\s\S]*?(?:ATS Score|Score)[*:\s]+`?(\d{1,3})%?`?"
+    matches = re.findall(pattern, text, re.IGNORECASE)
     
     seen = set()
     for _, name, score_str in matches:
         try:
             score = int(score_str)
             clean_name = name.split("(")[0].strip()
-            if clean_name not in seen:
+            if clean_name and clean_name not in seen:
                 seen.add(clean_name)
                 candidates.append({
                     "candidate_name": clean_name,
@@ -196,22 +197,25 @@ def extract_candidate_scores_for_chart(text: str) -> List[Dict[str, Any]]:
         except ValueError:
             continue
 
+    # Pattern 2: Matrix table rows: "Sarah Chen  13%  ..."
     if not candidates:
-        alt_pattern = r"(?:Candidate|Resume)[:\s]+([A-Za-z\s]+)[\s\S]*?(?:ATS Score:|\bScore:)\s*`?(\d{1,3})%?`?"
-        alt_matches = re.findall(alt_pattern, text)
-        for name, score_str in alt_matches:
-            try:
-                cname = name.strip()
-                if cname not in seen:
+        table_pattern = r"(?:^|\n)\s*([A-Za-z\s]{3,25})\s+(\d{1,3})%\s+"
+        table_matches = re.findall(table_pattern, text)
+        for name, score_str in table_matches:
+            cname = name.strip()
+            if cname.lower() not in ["candidate", "score", "total", "status"] and cname not in seen:
+                try:
+                    score = int(score_str)
                     seen.add(cname)
                     candidates.append({
                         "candidate_name": cname,
-                        "ats_score": int(score_str)
+                        "ats_score": score
                     })
-            except ValueError:
-                continue
+                except ValueError:
+                    continue
 
     return candidates
+
 
 
 def classify_document(text: str, filename: str) -> str:
