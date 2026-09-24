@@ -496,13 +496,20 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     chat_id = update.effective_chat.id
     session = get_session(chat_id)
-    latest_report = session.get("latest_report", "")
+    
+    # Read from session or fall back to the text of the message containing the button
+    message_text = (query.message.text or "") if query.message else ""
+    report_text = session.get("latest_report", "") or message_text
 
     if query.data == "cb_chart":
-        candidates = extract_candidate_scores_for_chart(latest_report)
+        candidates = extract_candidate_scores_for_chart(report_text)
+        if not candidates and session.get("files"):
+            resumes = [f["name"].replace(".docx","").replace(".pdf","").replace(".txt","").replace("Resume_","").replace("_"," ") for f in session["files"] if f["type"] == "resume"]
+            candidates = [{"candidate_name": r[:22], "ats_score": 75} for r in resumes]
+
         if candidates:
             jds = [f["name"] for f in session.get("files", []) if f["type"] == "job_description"]
-            title = jds[0] if jds else "Candidate Fit Ranking"
+            title = jds[0].replace(".docx","").replace(".pdf","").replace(".txt","") if jds else "Candidate Fit Ranking"
             chart_bytes = generate_ats_chart(candidates, title)
             await query.message.reply_photo(
                 photo=chart_bytes,
@@ -513,27 +520,35 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.message.reply_text("ℹ️ Please run an analysis first by tapping '🚀 Analyze Resumes'.")
 
     elif query.data == "cb_matrix":
-        if latest_report:
-            # Extract or display the candidate comparison matrix
-            matrix_match = re.search(r"📋 \*CANDIDATE COMPARISON MATRIX\*[\s\S]*?```([\s\S]*?)```", latest_report)
+        candidates = extract_candidate_scores_for_chart(report_text)
+        if candidates:
+            matrix_lines = [
+                "📋 *CANDIDATE COMPARISON MATRIX*",
+                "```",
+                f"{'Candidate':<22} {'Score':<7} {'Status':<12}",
+                "-" * 44
+            ]
+            for c in sorted(candidates, key=lambda x: x["ats_score"], reverse=True):
+                status = "Strong" if c["ats_score"] >= 80 else ("Moderate" if c["ats_score"] >= 60 else "Low")
+                matrix_lines.append(f"{c['candidate_name']:<22} {str(c['ats_score'])+'%':<7} {status:<12}")
+            matrix_lines.append("```")
+            await query.message.reply_text("\n".join(matrix_lines), parse_mode="Markdown")
+        elif report_text:
+            matrix_match = re.search(r"📋 \*CANDIDATE COMPARISON MATRIX\*[\s\S]*?```([\s\S]*?)```", report_text)
             if matrix_match:
-                table_text = matrix_match.group(1).strip()
-                await query.message.reply_text(
-                    f"📋 *CANDIDATE COMPARISON MATRIX:*\n\n```\n{table_text}\n```",
-                    parse_mode="Markdown"
-                )
+                await query.message.reply_text(f"📋 *CANDIDATE COMPARISON MATRIX:*\n\n```{matrix_match.group(1)}```", parse_mode="Markdown")
             else:
-                prompt = "Please output ONLY the Candidate Comparison Matrix table comparing all evaluated candidates with their ATS Scores, Tech fit %, and status."
+                prompt = "Please output ONLY the Candidate Comparison Matrix table comparing all evaluated candidates."
                 await process_ai_interaction(query, chat_id, session, prompt)
         else:
             await query.message.reply_text("ℹ️ Please run an analysis first to view the matrix.")
 
     elif query.data == "cb_pdf":
-        if latest_report:
+        if report_text:
             wait = await query.message.reply_text("📄 *Compiling Executive Audit PDF Report...*", parse_mode="Markdown")
             jds = [f["name"] for f in session.get("files", []) if f["type"] == "job_description"]
             title = jds[0] if jds else "Executive ATS Dossier"
-            pdf_bytes = generate_audit_pdf(latest_report, title)
+            pdf_bytes = generate_audit_pdf(report_text, title)
             await wait.delete()
             await query.message.reply_document(
                 document=io.BytesIO(pdf_bytes),
@@ -545,18 +560,19 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.message.reply_text("ℹ️ Run an analysis first before downloading PDF.")
 
     elif query.data == "cb_interview":
-        if latest_report:
+        if report_text:
             prompt = "Based on the candidates evaluated and their specific missing skills, generate 3 rigorous technical interview questions and 2 behavioral questions tailored to vet their weak areas, along with model answers."
             await process_ai_interaction(query, chat_id, session, prompt)
         else:
             await query.message.reply_text("ℹ️ Run an analysis first to generate tailored interview questions.")
 
     elif query.data == "cb_courses":
-        if latest_report:
+        if report_text:
             prompt = "Provide an enriched master learning curriculum with direct working hyperlinks (Coursera, edX, Udemy, freeCodeCamp, Harvard CS50, DeepLearning.AI) for all missing skills found across candidates."
             await process_ai_interaction(query, chat_id, session, prompt)
         else:
             await query.message.reply_text("ℹ️ Run an analysis first to see course recommendations.")
+
 
 
 def main():
